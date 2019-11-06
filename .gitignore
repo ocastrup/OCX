@@ -4,6 +4,8 @@ MathematicaWrapper/
 OCX_Models/
 OCXDataFrames/
 OCC/
+Excluded/
+
 #Ignore XMLSPy files
 *.spp
 *.xsd
