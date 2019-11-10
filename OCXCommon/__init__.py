@@ -17,3 +17,20 @@ class OCXUnit: #TODO: Implement parsing of UnitsML types
         value = quantity.get('numericvalue')
         unit = quantity.get('unit')
         return float(value) # Convert string to float
+
+# Common messaging
+class LogMessage:
+    def __init__(self, object, log):
+        if log:
+            tag = object.tag
+            id = object.get('name')
+            if id == None:
+                id = object.get('id')
+            print('Parsing element : {} with id: {}'.format(tag, id))
+        return
+class Message:
+    def __init__(self, object, msg):
+        tag = object.tag
+        id = object.get('id')
+        print('OCX message: in {} with id {}: {} '.format(tag, id, msg))
+        return

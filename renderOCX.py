@@ -8,6 +8,7 @@
 import argparse
 import os, pathlib
 import OCXParser
+import OCXGeometry
 from OCC.Display.WebGl import x3dom_renderer
 from OCC.Core.STEPControl import STEPControl_Writer, STEPControl_AsIs
 from OCC.Core.Interface import Interface_Static_SetCVal
@@ -22,10 +23,10 @@ def main():
                                      description="Renders the whole OCX model or a part identified by the guid.")
     # Add the arguments to the parser
     argp.add_argument("-file", type=str, help="Your input OCX file.", default='OCX_Models/OpenHCMBox_20191031.xml')
-    argp.add_argument("-schema", type=str, help="URI to OCX schema xsd", default='OCX_Schema.xsd')
-    argp.add_argument("-e", "--external", default="yes", type=str, help="Render the model from the external geometry. This is the default")
+    argp.add_argument("-schema", type=str, help="URI to OCX schema xsd", default='OCX_Models/OCX_Schema.xsd')
+    argp.add_argument("-e", "--external", default=True, type=bool, help="Render the model from the external geometry. This is the default")
     argp.add_argument("-s", "--solid", default=False, type=bool, help="Render a solid model. The default is to render a sheet model. This option is only used if option -external=no")
-    argp.add_argument("-l", "--log", default=False, type=bool, help="Output logging information. This is useful for debugging")
+    argp.add_argument("-l", "--log", default=True, type=bool, help="Output logging information. This is useful for debugging")
 #    argp.add_argument("-g", "--guid", default='{0010A20F-0000-0000-453F-D518A55C2204}',type=str, help="The GUIDRef of the shape to be rendered. If empty, the whole model is rendered")
     argp.add_argument("-g", "--guid", default='none',type=str, help="The GUIDRef of the shape to be rendered. If empty, the whole model is rendered")
     argp.add_argument("-r", "--render", default=False,type=bool, help="If True, render the model")
@@ -36,7 +37,7 @@ def main():
     ext = options.external
     # Verify that the model and schema exist
     # create the model parser
-    model = OCXParser.OCXmodel(options)
+    model = OCXParser.OCXmodel(options.file, options.schema, options.log)
     file = pathlib.Path(options.file)
     schemafile = pathlib.Path(options.schema)
     #Import the model only if the model and schema exist
@@ -46,17 +47,19 @@ def main():
         print('Please specify the correct schema location {}'.format(options.schema))
     else:
         model.importModel()
+        # Create the geometry creator
+        geom = OCXGeometry.OCXGeometry(model, model.dict, options.log)
         # Render only one part
         if not guid =='none':
-            if ext == 'yes':
-                shapes = model.externalPartGeometry(guid)
+            if ext == True:
+                shapes = geom.externalPartGeometry(guid)
             else:
-                shapes = model.createPartGeometry(guid, options.solid)
+                shapes = geom.createPartGeometry(guid, options.solid)
         else:
-            if ext == 'yes':
-                shapes = model.externalGeometryAssembly()
+            if ext == True:
+                shapes = geom.externalGeometryAssembly()
             else:
-                shapes = model.createGeometry(options.solid)
+                shapes = geom.createGeometry(options.solid)
         if options.step:
             # Export STEP file
             # initialize the STEP exporter
