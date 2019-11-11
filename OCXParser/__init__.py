@@ -139,7 +139,7 @@ class OCXdom:
         self.root = self.tree.getroot()  # The root node
         self.version = self.root.get('schemaVersion', namespace)  # The schema version of the parsed OCX
         # ocx = self.root.find('ocxXML', namespace)
-        # self.header = OCXParser.Header(ocx, self.dict, False)
+        # self.header = Header(ocx, self.dict, False)
 
     def getRoot(self):
         return self.root
@@ -174,6 +174,8 @@ class OCXdom:
     def getPillars(self):
         return self.root.findall('.//' + self.dict['pillar'])
 
+    def getVessel(self):
+        return self.root.find('.//' + self.dict['vessel'])
 
 # Class to parse the OCX model
 class OCXmodel:
@@ -182,7 +184,7 @@ class OCXmodel:
         self.ocxschema = Path(schemafile)
         self.logging = log
         # Create the schema parser and get the namespaces
-        sparser = OCXParser.OCXschema(self.ocxschema.resolve())
+        sparser = OCXschema(self.ocxschema.resolve())
         self.namespace = sparser.getNameSpace()
         self.schema_version = sparser.version
         self.dict = sparser.dict  # The dictionary of parsable ocx elements
@@ -197,13 +199,14 @@ class OCXmodel:
     # Import the OCX instances
     def importModel(self):
         # Create the OCXdom
-        self.dom = OCXParser.OCXdom(self.ocxfile.resolve(), self.dict, self.namespace)
+        self.dom = OCXdom(self.ocxfile.resolve(), self.dict, self.namespace)
         self.ocxversion = self.dom.version
 
         # print ocx version and get the root
         self.root = self.dom.getRoot()
         # get the ocxXML header info
-        header = OCXParser.Header(self.root, self.dict, self.logging)
+        header = Header(self.root, self.dict, self.logging)
+
 
         print('Parsing OCX model    : ', self.ocxfile.name)
         print('OCX version          : ', self.ocxversion)
@@ -219,6 +222,8 @@ class OCXmodel:
             print('')
 
         # dom queries
+        # Vessel
+        self.vessel = self.dom.getVessel()
         # Brackets
         self.brackets = self.dom.getBrackets()
         # Plates
@@ -237,7 +242,7 @@ class OCXmodel:
         self.createGUIDTable()
         # Frame lookup table
         self.createFrameTable()
-        # Fine all panel children plates
+        # Find all panel children
         self.findPanelChildren()
 
         print('')
@@ -274,6 +279,10 @@ class OCXmodel:
     def pillars(self):
         return self.pillars
 
+    def vessel(self):
+        return self.vessel
+
+
     # Find all children structure parts of  the panels and store it's guids  in a dict with the panel guid as key
     def findPanelChildren(self):
         panels = {}
@@ -299,6 +308,7 @@ class OCXmodel:
             for child in children:
                 childguid = self.getGUID(child)
                 pillars.append(childguid)
+            # TODO: Add seams?
             # Add all children
             panels[panelguid] = plates + stiffeners + brackets + pillars
         self.panelchildren = panels
@@ -389,7 +399,7 @@ class OCXmodel:
     def createFrameTable(self):
         frametable = self.root.find('.//' + self.dict['frametables'])
         if not frametable == None:
-            tbl = OCXParser.FrameTable(frametable, self.dict, self.namespace, self.logging)
+            tbl = FrameTable(frametable, self.dict, self.namespace, self.logging)
             self.frametable = tbl.frametable
 
     def logging(self, log):
@@ -478,9 +488,39 @@ class Header:
     def hasHeader(self):
         return self.header
 
+class Description:
+    def __init__(self, object, dict, log=False):
+        description = object.find(dict['description'])
+        if not description == None:
+            self.description = description
+            self.hasDesc = True
+        else:
+            self.hasDesc = False
+
+    def description(self):
+        return self.description
+
+    def hasDescription(self):
+        return self.hasDesc
+
+class Vessel:
+    def __init__(self, model: OCXmodel, vessel, dict, log=False):
+        self.logging = log
+        self.mode = model
+        self.vessel = vessel
+        self.name = vessel.get('name')
+        self.guid = vessel.get(dict['guidref'])
+
+    def name(self):
+        if self.name == None:
+            self.name = self.vessel.get('id')
+        return self.name
+
+    def guid(self):
+        return self.guid
 
 class Plane3D:
-    def __init__(self, plane, dict, model: OCXParser.OCXmodel):
+    def __init__(self, plane, dict, model: OCXmodel):
         self.edge = None
         self.dict = dict
         self.model = model
@@ -510,7 +550,7 @@ class Plane3D:
 
 
 class Material:
-    def __init__(self, model: OCXParser.OCXmodel, parent, material, dict, log=False):
+    def __init__(self, model: OCXmodel, parent, material, dict, log=False):
         self.dict = dict
         self.logging = log
         self.model = model
@@ -522,15 +562,15 @@ class Material:
         if thickness == None:
             # Assign a default thickness
             th = 0.01
-            OCXParser.ParseError(self.parent, 'has no thickness')
+            ParseError(self.parent, 'has no thickness')
         else:
             unit = OCXCommon.OCXUnit()
             th = float(unit.numericValue(thickness))
         return th
 
-
+# TODO: Implement reading of the product structure
 class DesignView:
-    def __init__(self, model: OCXParser.OCXmodel, parent, view, dict, log=False):
+    def __init__(self, model: OCXmodel, parent, view, dict, log=False):
         self.dict = dict
         self.logging = log
         self.model = model
@@ -541,11 +581,9 @@ class DesignView:
         return
 
 
-# TODO: Implement reading of the product structure
-
 # Return the UnboundedGeometry as a surface
 class UnboundedGeometry:
-    def __init__(self, model: OCXParser.OCXmodel, object, dict, log=False):
+    def __init__(self, model: OCXmodel, object, dict, log=False):
         self.dict = dict
         self.object = object
         self.logging = log
@@ -579,13 +617,13 @@ class UnboundedGeometry:
             # elif child.tag == self.dict['cylinder3d']:
             # edge = self.circle(child)
 
-            if child.tag == self.dict['nurbssurface']:
-                mkface = OCXParser.NurbsSurface(child, self.dict)
-                if mkface.done:
-                    self.face.append(mkface.Value())
+            #if child.tag == self.dict['nurbssurface']:
+            #    mkface = OCXGeometry.NurbsSurface(child, self.dict)
+            #    if mkface.done:
+            #        self.face.append(mkface.Value())
 
-            elif child.tag == self.dict['plane3d']:
-                mkface = OCXParser.Plane3D(child, self.dict)
+            if child.tag == self.dict['plane3d']:
+                mkface = Plane3D(child, self.dict)
                 if mkface.done:
                     self.face.append(mkface.Value())
 
@@ -598,10 +636,6 @@ class UnboundedGeometry:
             else:
                 print('UnboundedGeometry: Unknown child ', child.tag)
         return self.face
-
-
-
-
 
 def find_replace_multi(string, dictionary):
     for item in dictionary.keys():

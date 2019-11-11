@@ -22,7 +22,7 @@ def main():
                                      usage='%(prog)s [options] OCXfile schema',
                                      description="Renders the whole OCX model or a part identified by the guid.")
     # Add the arguments to the parser
-    argp.add_argument("-file", type=str, help="Your input OCX file.", default='OCX_Models/OpenHCMBox_20191031.xml')
+    argp.add_argument("-file", type=str, help="Your input OCX file.", default='OCX_Models/OpenHCMMidships_BVTest.xml')
     argp.add_argument("-schema", type=str, help="URI to OCX schema xsd", default='OCX_Models/OCX_Schema.xsd')
     argp.add_argument("-e", "--external", default=True, type=bool, help="Render the model from the external geometry. This is the default")
     argp.add_argument("-s", "--solid", default=False, type=bool, help="Render a solid model. The default is to render a sheet model. This option is only used if option -external=no")
@@ -31,7 +31,6 @@ def main():
     argp.add_argument("-g", "--guid", default='none',type=str, help="The GUIDRef of the shape to be rendered. If empty, the whole model is rendered")
     argp.add_argument("-r", "--render", default=False,type=bool, help="If True, render the model")
     argp.add_argument("-st", "--step", default=True, type=bool, help="Export the OCX model to STEP")
-    argp.add_argument("-sf", "--stepfile", default='OCXmodel.stp', type=str, help="File name of STEP export")
     options = argp.parse_args()
     guid = options.guid
     ext = options.external
@@ -60,22 +59,6 @@ def main():
                 shapes = geom.externalGeometryAssembly()
             else:
                 shapes = geom.createGeometry(options.solid)
-        if options.step:
-            # Export STEP file
-            # initialize the STEP exporter
-            step_writer = STEPControl_Writer()
-            Interface_Static_SetCVal("write.step.schema", "AP203")
-            # transfer shapes and write file
-            if isinstance(shapes, list):
-                for shape in shapes:
-                    step_writer.Transfer(shape, STEPControl_AsIs)
-            elif not shapes == None:
-                 step_writer.Transfer(shapes, STEPControl_AsIs)
-            else:
-                print('No shapes to export')
-            status = step_writer.Write(options.stepfile)
-            if status != IFSelect_RetDone:
-                raise AssertionError("load failed")
         if options.render:
             #Render shapes
             my_renderer = x3dom_renderer.X3DomRenderer()

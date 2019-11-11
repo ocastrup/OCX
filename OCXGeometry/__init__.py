@@ -5,6 +5,7 @@
 #  notice and this notice are preserved.  This file is offered as-is,
 #  without any warranty.
 import os
+import pathlib
 from pathlib import Path
 
 import OCC
@@ -132,12 +133,12 @@ class OCXGeometry(GeometryBase):
 
     def externalGeometryAssembly(self):
         # Create a TDoc holding the assembly of structure parts with external geometry. When assembled, write the STEP file
-        # Loop over all Panels
+        # Initialize the  writer
+        shapes = []
         step_writer = STEPCAFControl_Writer()
         step_writer.SetNameMode(True)
         step_writer.SetPropsMode(True)
-        panelchildren = []
-        # create an handle to a document
+        # create the handle to a document
         doc = TDocStd_Document(TCollection_ExtendedString("ocx-doc"))
         # Get root assembly
         shape_tool = XCAFDoc_DocumentTool_ShapeTool(doc.Main())
@@ -146,6 +147,8 @@ class OCXGeometry(GeometryBase):
         l_layers = XCAFDoc_DocumentTool_LayerTool(doc.Main())
         l_materials = XCAFDoc_DocumentTool_MaterialTool(doc.Main())
         aBuilder = BRep_Builder()
+        # Loop over all Panels
+        panelchildren = []
         for panel in self.model.panels:
             OCXCommon.LogMessage(panel, self.logging)
             guid = self.model.getGUID(panel)
@@ -154,7 +157,6 @@ class OCXGeometry(GeometryBase):
             # Build the Panel compound
             compound = TopoDS_Compound()
             aBuilder.MakeCompound(compound)
-            label = shape_tool.AddShape(compound)
             label = shape_tool.AddShape(compound)
             pname = panel.get('name')
             tname = TDataStd_Name()
@@ -228,7 +230,7 @@ class OCXGeometry(GeometryBase):
                     label = shape_tool.AddShape(extg.Shape())
                     tname.Set(TCollection_ExtendedString(name))
                     label.AddAttribute(tname)
-        step_writer.Perform(doc, TCollection_AsciiString('TCAFdoc.stp'))
+        step_writer.Perform(doc, TCollection_AsciiString(self.model.ocxfile.stem + '.stp'))
         return
 
     def externalPartGeometry(self, guid):
@@ -594,9 +596,13 @@ class ExternalGeometry(GeometryBase):
             if self.logging == True:
                 OCXCommon.Message(self.object, 'has no external geometry')
         else:
-            gfile = Path(extg.get(self.dict['externalref'])) # Relative path to the input ocxfile
+            extfile= str(extg.get(self.dict['externalref']))  # Relative path to the input ocxfile
+            extfile= extfile.replace('\\','/') #Fix for UNIX systems
+            gfile = Path(extfile)
             # Build the full file path
-            file = self.ocxfile.parent / gfile
+            file = self.ocxfile.parent
+            for part in gfile.parts:
+                file = file / part
             filename = file.resolve()
             format = extg.get('geometryFormat')
             if filename.is_file():
