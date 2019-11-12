@@ -177,6 +177,9 @@ class OCXdom:
     def getVessel(self):
         return self.root.find('.//' + self.dict['vessel'])
 
+    def getSeams(self):
+        return self.root.find('.//' + self.dict['seam'])
+
 # Class to parse the OCX model
 class OCXmodel:
     def __init__(self, ocxfile: str, schemafile: str, log=False):
@@ -184,7 +187,7 @@ class OCXmodel:
         self.ocxschema = Path(schemafile)
         self.logging = log
         # Create the schema parser and get the namespaces
-        sparser = OCXschema(self.ocxschema.resolve())
+        sparser = OCXschema(self.ocxschema)
         self.namespace = sparser.getNameSpace()
         self.schema_version = sparser.version
         self.dict = sparser.dict  # The dictionary of parsable ocx elements
@@ -232,30 +235,38 @@ class OCXmodel:
         self.panels = self.dom.getPanels()
         # Stiffeners
         self.stiffeners = self.dom.getStiffeners()
+        # Stiffeners
+        self.seams = self.dom.getSeams()
         # Materials
         self.materials = self.dom.getMaterials()
         # Sections
         self.sections = self.dom.getSections()
         # Pillars
         self.pillars = self.dom.getPillars()
-        # Guid lookup table
-        self.createGUIDTable()
         # Frame lookup table
         self.createFrameTable()
+        # Guid lookup table
+        self.createGUIDTable()
         # Find all panel children
         self.findPanelChildren()
 
         print('')
-        print('Structure parts in model')
+        print('Structure parts in model {}'.format(self.ocxfile.name))
         print('------------------------')
-        print('Number of panels     : ', len(self.panels))
-        print('Number of plates     : ', len(self.plates))
-        print('Number of stiffeners : ', len(self.stiffeners))
-        print('Number of pillars    : ', len(self.pillars))
-        print('Number of brackets   : ', len(self.brackets))
-        print('Number of materials  : ', len(self.materials))
-        print('Number of sections   : ', len(self.sections))
-        print('')
+        print('Number of vessels        : ', 1)
+        print('Number of reference grids: ', len(self.frametable))
+        print('Number of panels         : ', len(self.panels))
+        print('Number of plates         : ', len(self.plates))
+        print('Number of stiffeners     : ', len(self.stiffeners))
+        print('Number of pillars        : ', len(self.pillars))
+        print('Number of brackets       : ', len(self.brackets))
+        print('Number of seams          : ', len(self.seams))
+        print('Number of materials      : ', len(self.materials))
+        print('Number of sections       : ', len(self.sections))
+        print('-------------------------------------')
+        parts = 1 + len(self.frametable) + len(self.panels) + len(self.plates) + len(self.stiffeners) \
+                + len(self.pillars) + len(self.brackets) + len(self.seams)  + len(self.materials) +  len(self.sections)
+        print('Total number of parts    : {}'.format(parts))
         return
 
     def panels(self):
@@ -308,9 +319,14 @@ class OCXmodel:
             for child in children:
                 childguid = self.getGUID(child)
                 pillars.append(childguid)
-            # TODO: Add seams?
+            # Seams
+            seams = []
+            children = panel.findall('.//' + self.dict['seam'])
+            for child in children:
+                childguid = self.getGUID(child)
+                seams.append(childguid)
             # Add all children
-            panels[panelguid] = plates + stiffeners + brackets + pillars
+            panels[panelguid] = plates + stiffeners + brackets + pillars + seams
         self.panelchildren = panels
 
     def getParentPanelGuid(self, sibling: str):
@@ -334,6 +350,13 @@ class OCXmodel:
         else:
             print('The GUIDRef {} does not exist in the OCX model'.format(guid))
             return None
+    def objectType(self, guid: str):
+        if guid in self.guids:
+            object = self.guids[guid]
+            return object.tag
+        else:
+            print('The GUIDRef {} does not exist in the OCX model'.format(guid))
+            return None
 
     def getGUIDs(self):
         return self.guids
@@ -346,10 +369,15 @@ class OCXmodel:
         tup = self.frametable[guid]
         return tup[1]
 
-
     def createGUIDTable(self):
         duplicates = []
         guids = {}
+        #  Only one Vessel
+        guid = self.getGUID(self.vessel)
+        if not guid in guids:
+            guids[guid] = self.vessel
+        else:
+            duplicates.append(self.vessel)
         for part in self.plates:
             guid = self.getGUID(part)
             if not guid in guids:
@@ -374,6 +402,12 @@ class OCXmodel:
                 guids[guid] = part
             else:
                 duplicates.append(part)
+        for part in self.seams:
+            guid = self.getGUID(part)
+            if not guid in guids:
+                guids[guid] = part
+            else:
+                duplicates.append(part)
         for part in self.sections:
             guid = self.getGUID(part)
             if not guid in guids:
@@ -381,6 +415,25 @@ class OCXmodel:
             else:
                 duplicates.append(part)
         for part in self.materials:
+            guid = self.getGUID(part)
+            if not guid in guids:
+                guids[guid] = part
+            else:
+                duplicates.append(part)
+        # Frametables
+        for part in self.xrefs:
+            guid = self.getGUID(part)
+            if not guid in guids:
+                guids[guid] = part
+            else:
+                duplicates.append(part)
+        for part in self.yrefs:
+            guid = self.getGUID(part)
+            if not guid in guids:
+                guids[guid] = part
+            else:
+                duplicates.append(part)
+        for part in self.zrefs:
             guid = self.getGUID(part)
             if not guid in guids:
                 guids[guid] = part
@@ -400,7 +453,15 @@ class OCXmodel:
         frametable = self.root.find('.//' + self.dict['frametables'])
         if not frametable == None:
             tbl = FrameTable(frametable, self.dict, self.namespace, self.logging)
+            self.xrefs = tbl.xRef()
+            self.yrefs = tbl.yRef()
+            self.zrefs = tbl.zRef()
             self.frametable = tbl.frametable
+
+    def printFrameTable(self):
+        for frame in self.frametable:
+            print('Frame: {}, Position: {}, NormalVector: {}'.format(frame, self.frametable[frame][0],
+                                                                     self.frametable[frame][1]))
 
     def logging(self, log):
         self.logging = log
@@ -418,43 +479,86 @@ class FrameTable:
         self.done = False
         self.frametable = {}
         self.namespace = namespace
-        # Create the table
+        # Read the table
+        self.readTable()
+        # Create lookup tabøe
         self.createTable()
         return
 
-    def createTable(self):
+    def readTable(self):
         # Get all XRefPlanes
-        xrefp = self.table.find(self.dict['xrefplanes'])
-        yrefp = self.table.find(self.dict['yrefplanes'])
-        zrefp = self.table.find(self.dict['zrefplanes'])
+        self.xrefp = self.table.find(self.dict['xrefplanes'])
+        self.yrefp = self.table.find(self.dict['yrefplanes'])
+        self.zrefp = self.table.find(self.dict['zrefplanes'])
+
+
+    def xRef(self):
+        return self.xrefp
+
+    def yRef(self):
+        return self.yrefp
+
+    def zRef(self):
+        return self.zrefp
+
+    def createTable(self):
         # X positions
-        xrefs = xrefp.findall(self.dict['refplane'])
+        xrefs = self.xrefp.findall(self.dict['refplane'])
         for ref in xrefs:
-            guid = ref.get(self.dict['guidref'])
-            refloc = ref.find(self.dict['referencelocation'])
+            refp = RefPlane(ref, self.dict)
+            guid = refp.guid
+            refloc = refp.location()
             unit = OCXCommon.OCXUnit(self.namespace)
             pos = unit.numericValue(refloc)
             self.frametable[guid] = (
                 numpy.array([pos, 0, 0]), numpy.array([1, 0, 0]))  # tuple of ref pos and plane normal vector
         # Y positions
-        yrefs = yrefp.findall(self.dict['refplane'])
+        yrefs = self.yrefp.findall(self.dict['refplane'])
         for ref in yrefs:
-            guid = ref.get(self.dict['guidref'])
-            refloc = ref.find(self.dict['referencelocation'])
+            refp = RefPlane(ref, self.dict)
+            guid = refp.guid
+            refloc = refp.location()
             unit = OCXCommon.OCXUnit(self.namespace)
             pos = unit.numericValue(refloc)
             self.frametable[guid] = (
                 numpy.array([0, pos, 0]), numpy.array([0, 1, 0]))  # tuple of ref pos and plane normal vector
         # Z positions
-        zrefs = zrefp.findall(self.dict['refplane'])
+        zrefs = self.zrefp.findall(self.dict['refplane'])
         for ref in zrefs:
-            guid = ref.get(self.dict['guidref'])
-            refloc = ref.find(self.dict['referencelocation'])
+            refp = RefPlane(ref, self.dict)
+            guid = refp.guid
+            refloc = refp.location()
             unit = OCXCommon.OCXUnit(self.namespace)
             pos = unit.numericValue(refloc)
             self.frametable[guid] = (
                 numpy.array([0, 0, pos]), numpy.array([0, 0, 1]))  # tuple of ref pos and plane normal vector
         return
+
+    def printFrameTable(self):
+        for frame in self.frametable:
+            print('Frame: {}, Position: {}, NormalVector: {}'.format(frame, self.frametable[frame][0],
+                                                                     self.frametable[frame][1]))
+class RefPlane:
+    def __init__(self, refplane, dict):
+        if not refplane == None:
+            self.guid = refplane.get(dict['guidref'])
+            self.name = refplane.get('name')
+            self.refloc = refplane.find(dict['referencelocation'])
+            self.ok = True
+        else:
+            self.guid = None
+            self.name = None
+            self.refloc = None
+            self.ok = False
+
+    def name(self):
+        return self.name
+
+    def guid(self):
+        return self.guid
+
+    def location(self):
+        return self.refloc
 
 
 class Header:
