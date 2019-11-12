@@ -11,6 +11,7 @@ Excluded/
 *.xsd
 *.zip
 *.xml
+*.stp
 
 # Ignore Mathematica notebooks 
 *.nb
