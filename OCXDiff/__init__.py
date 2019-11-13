@@ -21,12 +21,12 @@ class OCXDiff:
         self.deletedparts = self.findDeletedParts()
 
     def importModels(self) -> True:
-        self.ocx1 = OCXParser.OCXmodel(self.path1, self.schema, False)
-        self.ocx2 = OCXParser.OCXmodel(self.path2, self.schema, False)
-        self.ocx1.importModel()
-        self.guids1 = self.ocx1.getGUIDs()
-        self.ocx2.importModel()
-        self.guids2 = self.ocx2.getGUIDs()
+        self.baseline = OCXParser.OCXmodel(self.path1, self.schema, False)
+        self.newversion = OCXParser.OCXmodel(self.path2, self.schema, False)
+        self.baseline.importModel()
+        self.guids1 = self.baseline.getGUIDs()
+        self.newversion.importModel()
+        self.guids2 = self.newversion.getGUIDs()
 
     def findNewParts(self):
         newparts  =[]

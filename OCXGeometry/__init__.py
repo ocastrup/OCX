@@ -4,17 +4,13 @@
 #  are permitted in any medium without royalty provided the copyright
 #  notice and this notice are preserved.  This file is offered as-is,
 #  without any warranty.
-import os
-import pathlib
 from pathlib import Path
 
 import OCC
 import numpy
 from OCC.Core.BRep import BRep_Builder
 from OCC.Core.BRepPrimAPI import BRepPrimAPI_MakePrism
-from OCC.Core.Standard import Standard_GUID
 from OCC.Core.TCollection import TCollection_ExtendedString, TCollection_AsciiString
-from OCC.Core.TDF import TDF_Label
 from OCC.Core.TDataStd import TDataStd_Name
 from OCC.Core.TDocStd import TDocStd_Document
 from OCC.Core.TopAbs import TopAbs_EDGE
@@ -26,12 +22,12 @@ from OCC.Core.XCAFDoc import (XCAFDoc_DocumentTool_ShapeTool,
                               XCAFDoc_DocumentTool_ColorTool,
                               XCAFDoc_DocumentTool_LayerTool,
                               XCAFDoc_DocumentTool_MaterialTool)
-from OCC.Core.STEPCAFControl import STEPCAFControl_Reader, STEPCAFControl_Writer
+from OCC.Core.STEPCAFControl import STEPCAFControl_Writer
 
 import OCCWrapper
 import OCXCommon
 import OCXParser
-
+from OCXCommon import Point3D, Vector3D
 
 
 class GeometryBase:
@@ -62,7 +58,7 @@ class OCXGeometry(GeometryBase):
     def createGeometry(self, solid=False):
         # Loop over all brackets and create a Brep body if solid=True, else return the face
         shapes = []
-        for br in self.model.brackets:
+        for br in self.model.getBrackets:
             OCXCommon.LogMessage(br, self.logging)
             mkgeom = CreateShape(self.model, br, self.dict, solid, self.logging)  # Init the creator
             mkgeom.create()  # Create the Brep
@@ -72,7 +68,7 @@ class OCXGeometry(GeometryBase):
                 else:
                     shapes.append(mkgeom.face)
         # Loop over all plates and create a Brep body if solid=True, else return the face
-        for plate in self.model.plates:
+        for plate in self.model.getPlates:
             OCXCommon.LogMessage(plate, self.logging)
             mkgeom = CreateShape(self.model, plate, self.dict, solid, self.logging)  # Init the creator
             mkgeom.create()  # Create the Brep
@@ -105,25 +101,25 @@ class OCXGeometry(GeometryBase):
         # Read the iges external geometry for each plate and return the shapes
         # Loop over all objects
         shapes = []
-        for plate in self.model.plates:
+        for plate in self.model.getPlates:
             LogMessage(plate, self.logging)
             extg = ExternalGeometry(self.model, plate, self.dict, self.logging)  # Init the creator
             extg.readExtGeometry()  # Create the Brep
             if extg.IsDone():
                 shapes.append(extg.Shape())
-        for stiffener in self.model.stiffeners:
+        for stiffener in self.model.getStiffeners:
             LogMessage(stiffener, self.logging)
             extg = ExternalGeometry(self.model, stiffener, self.dict, self.logging)  # Init the creator
             extg.readExtGeometry()  # Create the Brep
             if extg.IsDone():
                 shapes.append(extg.Shape())
-        for br in self.model.brackets:
+        for br in self.model.getBrackets:
             LogMessage(br, self.logging)
             extg = ExternalGeometry(self.model, br, self.dict, self.logging)  # Init the creator
             extg.readExtGeometry()  # Create the Brep
             if extg.IsDone():
                 shapes.append(extg.Shape())
-        for pil in self.model.pillars:
+        for pil in self.model.getPillars:
             LogMessage(pil, self.logging)
             extg = ExternalGeometry(self.model, pil, self.dict, self.logging)  # Init the creator
             extg.readExtGeometry()  # Create the Brep
@@ -149,7 +145,7 @@ class OCXGeometry(GeometryBase):
         aBuilder = BRep_Builder()
         # Loop over all Panels
         panelchildren = []
-        for panel in self.model.panels:
+        for panel in self.model.getPanels:
             OCXCommon.LogMessage(panel, self.logging)
             guid = self.model.getGUID(panel)
             children = self.model.getPanelChildren(guid)
@@ -180,7 +176,7 @@ class OCXGeometry(GeometryBase):
         tname = TDataStd_Name()
         tname.Set(TCollection_ExtendedString('Brackets'))
         label.AddAttribute(tname)
-        for br in self.model.brackets:
+        for br in self.model.getBrackets:
             guid = self.model.getGUID(br)
             name = br.get('name')
             if guid not in panelchildren:
@@ -199,7 +195,7 @@ class OCXGeometry(GeometryBase):
         tname = TDataStd_Name()
         tname.Set(TCollection_ExtendedString('Plates'))
         label.AddAttribute(tname)
-        for pl in self.model.plates:
+        for pl in self.model.getPlates:
             guid = self.model.getGUID(pl)
             name = pl.get('name')
             if guid not in panelchildren:
@@ -218,7 +214,7 @@ class OCXGeometry(GeometryBase):
         tname = TDataStd_Name()
         tname.Set(TCollection_ExtendedString('Pillars'))
         label.AddAttribute(tname)
-        for pil in self.model.pillars:
+        for pil in self.model.getPillars:
             guid = self.model.getGUID(pil)
             name = pil.get('name')
             if guid not in panelchildren:
@@ -522,39 +518,6 @@ class OuterContour(GeometryBase):
                 # TODO: Get the coordinates from the edge curve
                 edge_explorer.Next()
         return pts
-
-
-class Point3D:
-    def __init__(self, point, dict):
-        # Function to retrieve the coordinates from an 'Point3D' type
-        # RETURNS:   the (x,y,z) coordinate
-        x = point.find(dict['x'])
-        y = point.find(dict['y'])
-        z = point.find(dict['z'])
-        unit = OCXCommon.OCXUnit(dict)
-        xv = unit.numericValue(x)
-        yv = unit.numericValue(y)
-        zv = unit.numericValue(z)
-        self.point = numpy.array([xv, yv, zv])
-
-    def GetPoint(self):
-        return self.point
-
-
-class Vector3D:
-    def __init__(self, vec, dict):
-        # Function to retrieve the unit vector from an 'Vector3D' type
-        # RETURNS:   the (x,y,z) vector
-        x = vec.get('x')
-        y = vec.get('y')
-        z = vec.get('z')
-        xv = float(x)
-        yv = float(y)
-        zv = float(z)
-        self.vec = numpy.array([xv, yv, zv])
-
-    def GetVector(self):
-        return self.vec
 
 
 class Line3D(GeometryBase):

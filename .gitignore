@@ -10,7 +10,7 @@ Excluded/
 *.spp
 *.xsd
 *.zip
-*.xml
+*.json
 
 # Ignore Mathematica notebooks 
 *.nb

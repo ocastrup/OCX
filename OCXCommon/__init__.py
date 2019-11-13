@@ -6,6 +6,10 @@
 #  without any warranty.
 
 # Class for UnitsML encapsulation
+import numpy
+
+import OCXCommon
+
 
 class OCXUnit: #TODO: Implement parsing of UnitsML types
     def __init__(self, namespace=None):
@@ -34,3 +38,36 @@ class Message:
         id = object.get('id')
         print('OCX message: in {} with id {}: {} '.format(tag, id, msg))
         return
+
+
+class Point3D:
+    def __init__(self, point, dict):
+        # Function to retrieve the coordinates from an 'Point3D' type
+        # RETURNS:   the (x,y,z) coordinate
+        x = point.find(dict['x'])
+        y = point.find(dict['y'])
+        z = point.find(dict['z'])
+        unit = OCXCommon.OCXUnit(dict)
+        xv = unit.numericValue(x)
+        yv = unit.numericValue(y)
+        zv = unit.numericValue(z)
+        self.point = numpy.array([xv, yv, zv])
+
+    def GetPoint(self):
+        return self.point
+
+
+class Vector3D:
+    def __init__(self, vec, dict):
+        # Function to retrieve the unit vector from an 'Vector3D' type
+        # RETURNS:   the (x,y,z) vector
+        x = vec.get('x')
+        y = vec.get('y')
+        z = vec.get('z')
+        xv = float(x)
+        yv = float(y)
+        zv = float(z)
+        self.vec = numpy.array([xv, yv, zv])
+
+    def GetVector(self):
+        return self.vec

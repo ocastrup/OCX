@@ -8,13 +8,11 @@
 import xml.etree.ElementTree as ET
 
 import numpy
-import os
+import os, logging
 import re
-
-import OCXGeometry
+from pathlib import Path
 import OCXParser
 
-from pathlib import Path
 
 from OCC.Core.BRep import BRep_Builder
 # from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
@@ -178,7 +176,7 @@ class OCXdom:
         return self.root.find('.//' + self.dict['vessel'])
 
     def getSeams(self):
-        return self.root.find('.//' + self.dict['seam'])
+        return self.root.findall('.//' + self.dict['seam'])
 
 # Class to parse the OCX model
 class OCXmodel:
@@ -193,6 +191,7 @@ class OCXmodel:
         self.dict = sparser.dict  # The dictionary of parsable ocx elements
         self.guids = {}  # GUID lookup table
         self.frametable = {}  # Frametable dict with guid as key
+        self.logger = logging.getLogger(__name__)
 
     # Generic function to retrieve the GUID from an object
     def getGUID(self, object):
@@ -219,11 +218,9 @@ class OCXmodel:
             print('Author               :  {}'.format(header.author))
             print('Originating system   :  {}'.format(header.system))
         if self.ocxversion != self.schema_version:
-            print('')
-            print('Warning: Version {} of the OCX model is different from the referenced schema version: {}' \
+            msg = ('Warning: Version {} of the OCX model is different from the referenced schema version: {}' \
                   .format(self.ocxversion, self.schema_version))
-            print('')
-
+            self.logger.warning(msg)
         # dom queries
         # Vessel
         self.vessel = self.dom.getVessel()
@@ -249,55 +246,213 @@ class OCXmodel:
         self.createGUIDTable()
         # Find all panel children
         self.findPanelChildren()
-
-        print('')
-        print('Structure parts in model {}'.format(self.ocxfile.name))
-        print('------------------------')
-        print('Number of vessels        : ', 1)
-        print('Number of reference grids: ', len(self.frametable))
-        print('Number of panels         : ', len(self.panels))
-        print('Number of plates         : ', len(self.plates))
-        print('Number of stiffeners     : ', len(self.stiffeners))
-        print('Number of pillars        : ', len(self.pillars))
-        print('Number of brackets       : ', len(self.brackets))
-        print('Number of seams          : ', len(self.seams))
-        print('Number of materials      : ', len(self.materials))
-        print('Number of sections       : ', len(self.sections))
-        print('-------------------------------------')
-        parts = 1 + len(self.frametable) + len(self.panels) + len(self.plates) + len(self.stiffeners) \
-                + len(self.pillars) + len(self.brackets) + len(self.seams)  + len(self.materials) +  len(self.sections)
-        print('Total number of parts    : {}'.format(parts))
+        #Model info
+        self.modelInfo()
         return
 
-    def panels(self):
+    def getPanels(self):
         return self.panels
 
-    def plates(self):
+    def getPlates(self):
         return self.plates
 
-    def stiffeners(self):
+    def getStiffeners(self):
         return self.stiffeners
 
-    def brackets(self):
+    def getBrackets(self):
         return self.brackets
 
-    def materials(self):
+    def getMaterials(self):
         return self.materials
 
-    def sections(self):
+    def getSections(self):
         return self.sections
 
-    def pillars(self):
+    def getPillars(self):
         return self.pillars
 
-    def vessel(self):
+    def getVessel(self):
         return self.vessel
 
+    def getSeams(self):
+        return self.seams
+
+
+    def modelInfo(self):
+        nframes = len(self.frametable)
+        nplates = len(self.getPlates())
+        npanels = len(self.getPanels())
+        nstiff = len(self.getStiffeners())
+        npil = len(self.getPillars())
+        nbr = len(self.getBrackets())
+        nseams = len(self.getSeams())
+        nmat = len(self.getMaterials())
+        nsec = len(self.getSections())
+        print('')
+        print('Structure parts in model {}'.format(self.ocxfile.name))
+        print('-------------------------------------')
+        print('Number of vessels         : {:9}'.format(1))
+        print('Number of reference grids : {:9}'.format(nframes))
+        print('Number of panels          : {:9}'.format(npanels))
+        print('Number of plates          : {:9}'.format(nplates))
+        print('Number of stiffeners      : {:9}'.format(nstiff))
+        print('Number of pillars         : {:9}'.format(npil))
+        print('Number of brackets        : {:9}'.format(nbr))
+        print('Number of seams           : {:9}'.format(nseams))
+        print('Number of materials       : {:9}'.format(nmat))
+        print('Number of sections        : {:9}'.format(nsec))
+        print('-------------------------------------')
+        parts = 1 + nframes + npanels + nplates + nstiff + npil + nbr + nseams + nmat + nsec
+        print('Total number of parts     : {:9}'.format(parts))
+        print('-------------------------------------')
+        print('')
+        return
+
+    def totalPlateDryWeight(self)->float:
+        dw = 0
+        for object in self.getPlates():
+            part = StructurePart(self, object,self.dict, self.namespace)
+            guid = part.getGuid()
+            if self.getParentPanelGuid(guid) == 'NotFound':
+                dw = dw + part.getDryWeight()
+        return dw
+
+    def totalStiffenerDryWeight(self)->float:
+        dw = 0
+        for object in self.getStiffeners():
+            part = StructurePart(self, object, self.dict, self.namespace)
+            guid = part.getGuid()
+            if self.getParentPanelGuid(guid) == 'NotFound':
+                dw = dw + part.getDryWeight()
+        return dw
+
+    def totalBracketDryWeight(self)-> float:
+        dw = 0
+        for object in self.getBrackets():
+            part = StructurePart(self, object, self.dict, self.namespace)
+            guid = part.getGuid()
+            if self.getParentPanelGuid(guid) == 'NotFound':
+                dw = dw + part.getDryWeight()
+        return dw
+
+    def totalPanelDryWeight(self)->tuple:
+        paneldw = 0
+        cdw = 0
+        for object in self.getPanels():
+            part = StructurePart(self, object, self.dict, self.namespace)
+            dw = part.getDryWeight()
+            if not dw == None:
+                paneldw = paneldw + dw
+            children = self.getPanelChildren(part.getGuid())
+            for child in children:
+                object = self.getObject(child)
+                part = StructurePart(self, object, self.dict, self.namespace)
+                if part.hasPysicalProperties():
+                    dw = part.getDryWeight()
+                    if not dw == None:
+                        cdw = cdw + dw
+        return (paneldw, cdw)
+
+    def printDryWeight(self):
+        wpanels = self.totalPanelDryWeight()
+        wplates = self.totalPlateDryWeight()
+        wstiff = self.totalStiffenerDryWeight()
+        wbr = self.totalBracketDryWeight()
+        print('')
+        print('Dry weight of parts in model {}'.format(self.ocxfile.name))
+        print('-------------------------------------')
+        print('Panels              : {:12.6e}'.format(wpanels[0]))
+        print('  Panel children    : {:12.6e}'.format(wpanels[1]))
+        print('Root plates         : {:12.6e}'.format(wplates))
+        print('Root stiffeners     : {:12.6e}'.format(wstiff))
+        print('Root brackets       : {:12.6e}'.format(wbr))
+        print('-------------------------------------')
+        if wpanels[0] > 0:
+            wp = wpanels[0]
+        else:
+            wp = wpanels[1]
+        total = wp + wplates + wstiff + wbr
+        print('Total weight        : {:12.6e}'.format(total))
+        print('-------------------------------------')
+        print('')
+        return
+
+    def modelQA(self):
+        # Duplicate GUIDS
+        print('QA checks on model {}'.format(self.ocxfile.name))
+        print('-------------------------------------')
+        self.checkPhysicalProperties()
+        self.checkDuplicates()
+        self.checkWeights()
+        return
+
+    def checkWeights(self): # Check if reported dry weight of Panel is equal to the sum of child weights
+        print('Checking Panel dry weights')
+        ok = True
+        for object in self.getPanels():
+            panel = StructurePart(self, object, self.dict, self.namespace)
+            if panel.hasPysicalProperties():
+                pw = panel.getDryWeight()
+                children = self.getPanelChildren(panel.getGuid())
+                cw = 0
+                for child in children:
+                    object = self.getObject(child)
+                    part = StructurePart(self, object, self.dict, self.namespace)
+                    if part.hasPysicalProperties():
+                        cw = cw + part.getDryWeight()
+                r = abs(1-cw/pw)
+                if r > 0.1:
+                    print('Panel with name {} and GUID {}:'.format(panel.getName(),panel.getGuid()))
+                    print('  The Panel DryWeight = {:9.3f} is different from the sum of child weights ={:9.3f}.'\
+                           .format(pw, cw))
+                    ok = False
+        if ok:
+            print('Panel dry weights OK')
+        print('-------------------------------------')
+        return
+
+    def checkDuplicates(self):
+        if len(self.duplicates) > 0:  # Non-unique quids
+            print('Duplicate GUID check')
+            msg =('There are {} non unique guids:'.format(len(self.duplicates)))
+            print(msg)
+            for object in self.duplicates:
+                part = StructurePart(self, object, self.dict, self.namespace)
+                name = part.getName()
+                id = part.getId()
+                tag = part.getType()
+                guid = part.getGuid()
+                msg =('Part {} with name {}, id {}  and GUID {} is a duplicate.'.format(tag, name, id, guid))
+                print(msg)
+        else:
+            print('Duplicate GUID check OK')
+        print('-------------------------------------')
+        return
+
+    def checkPhysicalProperties(self):
+        # Check Existence of properties
+        guids = self.getGUIDs()
+        nprops = 0
+        for guid in guids:
+            object = self.getObject(guid)
+            part = OCXParser.StructurePart(self, object,self.dict,self.namespace)
+            if not part.hasPysicalProperties():
+                type = part.getType()
+                if type == 'Panel' or type == 'Stiffener' or type == 'Plate' or type == 'Bracket':
+                    print('{} with guid {} has no PhysicalProperty'.format(part.getType(), part.getGuid()))
+                    nprops = nprops + 1
+        if nprops > 0:
+            print('PhysicalProperty check:')
+            print('Structure parts without PhysicalProperty: {}'.format(nprops))
+        else:
+            print('PhysicalProperty check OK')
+        print('-------------------------------------')
+        return
 
     # Find all children structure parts of  the panels and store it's guids  in a dict with the panel guid as key
     def findPanelChildren(self):
         panels = {}
-        for panel in self.panels:
+        for panel in self.getPanels():
             plates = []
             panelguid = self.getGUID(panel)
             children = panel.findall('.//' + self.dict['plate'])
@@ -440,14 +595,7 @@ class OCXmodel:
             else:
                 duplicates.append(part)
         self.guids = guids
-        if len(duplicates) > 0:  # Non-unique quids
-            print('There are {} non unique guids:'.format(len(duplicates)))
-            for part in duplicates:
-                name = part.get('name')
-                id = part.get('id')
-                tag = part.tag
-                guid = self.getGUID(part)
-                print('Part {} with name {}, id {}  and GUID {} is a duplicate.'.format(tag, name, id, guid))
+        self.duplicates = duplicates
 
     def createFrameTable(self):
         frametable = self.root.find('.//' + self.dict['frametables'])
@@ -560,6 +708,110 @@ class RefPlane:
     def location(self):
         return self.refloc
 
+class PhysicalProperties:
+    def __init__(self, parent, dict, namespace):
+        self.hasProp = False
+        if not parent == None:
+            props = parent.find(dict['physicalproperties'])
+            if not props == None:
+                dryw = props.find(dict['dryweight'])
+                unit = OCXCommon.OCXUnit(namespace)
+                self.dryweight = unit.numericValue(dryw)
+                cog = props.find(dict['centerofgravity'])
+                self.COG = OCXCommon.Point3D(cog, dict).GetPoint()
+                self.hasProp = True
+        else:
+            self.hasProp = False
+
+    def COG(self):
+        return self.COG
+
+    def dryWieght(self):
+        return self.dryweight
+
+class IDBase:
+    def __init__(self, object, dict):
+        self.object = object
+        self.dict = dict
+        self.id = object.get('id')
+
+    def getId(self):
+        return self.id
+
+class DescriptionBase(IDBase):
+    def __init__(self, object, dict, log=False):
+        super().__init__(object, dict)
+        self.name = object.get('name')
+        if self.name == None:
+            self.name = self.id
+        description = object.find(dict['description'])
+        if description == None:
+            self.hasDesc = False
+        else:
+            self.description = description
+            self.hasDesc = True
+        return
+
+    def getDescription(self):
+        return self.description
+
+    def hasDescription(self):
+        return self.hasDesc
+
+    def getName(self):
+        return self.name
+
+class EntityBase(DescriptionBase):
+    def __init__(self, object, dict):
+        super().__init__(object, dict)
+        self.guid = self.object.get(self.dict['guidref'])
+
+    def getGuid(self):
+        return self.guid
+
+class StructurePart(EntityBase):
+    def __init__(self, model, part, dict, namespace):
+        super().__init__(part, dict)
+        self.namespace = namespace
+        self.hasprops = False
+        self.model = model
+        props = part.find(dict['physicalproperties'])
+        if not props == None:
+            dryw = props.find(self.dict['dryweight'])
+            unit = OCXCommon.OCXUnit(self.namespace)
+            self.dryweight = unit.numericValue(dryw)
+            cog = props.find(self.dict['centerofgravity'])
+            self.COG = OCXCommon.Point3D(cog, dict).GetPoint()
+            self.hasprops = True
+        else:
+            self.hasprops = False
+
+    def getCOG(self):
+        return self.COG
+
+    def getDryWeight(self):
+        return self.dryweight
+
+    def hasPysicalProperties(self):
+        return self.hasprops
+
+    def getType(self):
+        tag = str(self.object.tag)
+        type = re.sub(r'\{.*\}','', tag) # Returns only the type after the namespace prefix
+        return type
+
+    def tightness(self):
+        mytype = self.getType()
+        if mytype == 'Panel':
+            tight = self.object.get('tightness')
+        elif mytype == 'Plate': # The plate inherit from Panel
+            guid = self.object.getGuid()
+            panelguid = self.model.getParentPanelGuid(guid)
+            panel = self.model.getObject(panelguid)
+            tight = panel.get('tightness')
+        else:
+            tight = 'Undefined'
+        return tight
 
 class Header:
     def __init__(self, object, dict, log=False):
@@ -592,20 +844,7 @@ class Header:
     def hasHeader(self):
         return self.header
 
-class Description:
-    def __init__(self, object, dict, log=False):
-        description = object.find(dict['description'])
-        if not description == None:
-            self.description = description
-            self.hasDesc = True
-        else:
-            self.hasDesc = False
 
-    def description(self):
-        return self.description
-
-    def hasDescription(self):
-        return self.hasDesc
 
 class Vessel:
     def __init__(self, model: OCXmodel, vessel, dict, log=False):
@@ -635,8 +874,8 @@ class Plane3D:
         if plane.tag == self.dict['plane3d']:
             origin = plane.find(dict['origin'])
             normal = plane.find(dict['normal'])
-            self.origin = OCXGeometry.Point3D(origin, dict).GetPoint()
-            self.normal = OCXGeometry.Vector3D(normal, dict).GetVector()
+            self.origin = OCXCommon.Point3D(origin, dict).GetPoint()
+            self.normal = OCXCommon.Vector3D(normal, dict).GetVector()
         elif plane.tag == self.dict['gridref']:
             guid = plane.get(self.dict['guidref'])
             refplane = model.getObject(guid)
