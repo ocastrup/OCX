@@ -5,12 +5,15 @@ OCX_Models/
 OCXDataFrames/
 OCC/
 Excluded/
+*.igs
+*.stp
 
 #Ignore XMLSPy files
 *.spp
 *.xsd
 *.zip
 *.json
+
 
 # Ignore Mathematica notebooks 
 *.nb
