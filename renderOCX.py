@@ -37,39 +37,31 @@ def main():
     # Verify that the model and schema exist
     # create the model parser
     model = OCXParser.OCXmodel(options.file, options.schema, options.log)
-    file = pathlib.Path(options.file)
-    schemafile = pathlib.Path(options.schema)
-    #Import the model only if the model and schema exist
-    if not file.is_file():
-        print('Please specify the correct model file {}'.format(options.file))
-    elif not schemafile.is_file():
-        print('Please specify the correct schema location {}'.format(options.schema))
-    else:
-        model.importModel()
-        # Create the geometry creator
-        geom = OCXGeometry.OCXGeometry(model, model.dict, options.log)
-        # Render only one part
-        if not guid =='none':
-            if ext == True:
-                shapes = geom.externalPartGeometry(guid)
-            else:
-                shapes = geom.createPartGeometry(guid, options.solid)
+    model.importModel()
+    # Create the geometry creator
+    geom = OCXGeometry.OCXGeometry(model, model.dict, options.log)
+    # Render only one part
+    if not guid =='none':
+        if ext == True:
+            shapes = geom.externalPartGeometry(guid)
         else:
-            if ext == True:
-                shapes = geom.externalGeometryAssembly()
-            else:
-                shapes = geom.createGeometry(options.solid)
-        if options.render:
-            #Render shapes
-            my_renderer = x3dom_renderer.X3DomRenderer()
-            if isinstance(shapes, list):
-                for shape in shapes:
-                    my_renderer.DisplayShape(shape, export_edges=False)
-            elif not shapes == None:
-                my_renderer.DisplayShape(shapes, export_edges=False)
-            else:
-                print('No shapes to render')
-            my_renderer.render()
+            shapes = geom.createPartGeometry(guid, options.solid)
+    else:
+        if ext == True:
+            shapes = geom.externalGeometryAssembly()
+        else:
+            shapes = geom.createGeometry(options.solid)
+    if options.render:
+        #Render shapes
+        my_renderer = x3dom_renderer.X3DomRenderer()
+        if isinstance(shapes, list):
+            for shape in shapes:
+                my_renderer.DisplayShape(shape, export_edges=False)
+        elif not shapes == None:
+            my_renderer.DisplayShape(shapes, export_edges=False)
+        else:
+            print('No shapes to render')
+        my_renderer.render()
 
 if __name__ == "__main__":
     main()

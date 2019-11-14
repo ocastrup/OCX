@@ -8,18 +8,29 @@
 import json
 import uuid
 import re
+from  bidict import bidict
 import OCXParser
 
-class jsonTemplate:
-    def __init__(self, file: str):
+class OCX2JSON:
+    def __init__(self, file='properties.json'):
         self.file = file
         self.dict = dict([('version','2')]) # Init  template
         self.attributevalues = {}
-
+        self.properties = {}
+        self.attributedefinition = {}
+        self.lookuptable = bidict({'lookup':'table'})
+        self.attributedefinition['attributeDefinitions'] = {'definitionName': 'Tightness',
+                      'type': 'string',
+                      'enableColorCoding': True,
+                      'showAttributeName': True,
+                      'colorCodingSettings': None}
+        self.dict.update(self.attributedefinition)
 
     def writeJson(self):
+        self.dict.update(self.attributevalues)
+        self.dict.update(self.properties)
         with open(self.file, 'w') as json_file:
-            json.dump(self.attributevalues, json_file, indent = 4, sort_keys=False)
+            json.dump(self.dict, json_file, indent = 4, sort_keys=False)
         return
 
 
@@ -27,49 +38,52 @@ class jsonTemplate:
         attributes = []
         for val in values:
             guid = uuid.uuid1()
+            # json fields
             attr = {'valueId': str(guid),
                     'value': val,
                     'metaData': None}
             attributes.append(attr)
+            #create a bidirectional lookup table for the tuple (valueID,value)
+            self.lookuptable[str(guid)] = val
         self.attributevalues['attributeValues'] = attributes
+        return
 
-class tightnessProperties(jsonTemplate):
-    def __init__(self, ocxmodel: OCXParser.OCXmodel, file: str):
-        super.__init__(file)
+    def getPropertyID(self, value):
+        return self.lookuptable.inverse[value]
+
+    def getPropertyValue(self, id):
+        return self.lookuptable[id]
+
+    def tightnessProperty(self, ocxmodel: OCXParser.OCXmodel, file: str):
         self.model = ocxmodel
-        definition = {('definitionName','Tightness'),
-                      ('type' , 'string'),
-                      ('enableColorCoding',True),
-                      ('showAttributeName',True),
-                      ('colorCodingSettings', None)}
-        self.dict['attributeDefinitions'] = definition
-        self.addSingleAttributeValues({'Undefined','NonTight','WaterTight','GasTight'})
-        '''{
-              "name": "property-Function_Type-bbbb37c9-1bd2-4257-bb08-91c850163c72",
-              "position": null,
-              "entityRef": {
-                "entityId": "bbbb37c9-1bd2-4257-bb08-91c850163c72",
-                "description": "Plate_bbbb37c9-1bd2-4257-bb08-91c850163c72"
-              },
-              "propertyId": "3880ece7-dcee-4984-a0ed-ed32be8aae66",
-              "attributes": [
-                {
-                  "definitionName": "Function Type",
-                  "valueId": "65169667-0024-4a09-a608-c62b19053bcf"
-                }
-              ]
-            }'''
+        self.file = file
+        #Set the property attributes
+        self.addSingleAttributeValues({'NonTight','WaterTight','GasTight','Undefined'})
+        properties = []
         for part in self.model.getPlates():
             plate = OCXParser.StructurePart(self.model, part, self.model.dict, self.model.namespace)
             guid = plate.getGuid()
-            guid = re.sub(r'\{','', guid) # Remove the  brackets
-            cleanguid = re.sub(r'\}','', guid) # Remove the  brackets
+            cleanguid = re.sub(r'[\{\}]*','', guid) # Remove the  brackets
             name = plate.getName()
+            type = plate.getType()
             tight = plate.tightness()
-            entityref = {('propertyId',cleanguid),
-                         ('description',name)}
-
-
+            propRef = self.getPropertyID(tight)
+            property = {'name':'Tightness',
+                        'position': None,
+                        'entityRef':{
+                            'entityId':guid,
+                            'description':name
+                        },
+                        'propertyId':str(uuid.uuid1()),
+                        'attributes':[
+                            {
+                                'definitionName':'Tightness',
+                                'valueId':propRef
+                            }
+                        ]
+                        }
+            properties.append(property)
+        self.properties['properties'] = properties
 
 
 

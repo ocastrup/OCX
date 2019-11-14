@@ -135,7 +135,7 @@ class OCXGeometry(GeometryBase):
         step_writer.SetNameMode(True)
         step_writer.SetPropsMode(True)
         # create the handle to a document
-        doc = TDocStd_Document(TCollection_ExtendedString("ocx-doc"))
+        doc = TDocStd_Document(TCollection_ExtendedString(\ocx-doc\))
         # Get root assembly
         shape_tool = XCAFDoc_DocumentTool_ShapeTool(doc.Main())
         shape_tool.SetAutoNaming(False)

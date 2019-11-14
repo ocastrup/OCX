@@ -29,34 +29,33 @@ class OCXschema:
     # The class contains the methods for retrieving the OCX elements
 
     def __init__(self, schema):
-        self.parsed = False
-        self.filename = schema  # The uri or the file name of the xsd schema
+        self.uri = Path(schema)  # The uri or the file name of the xsd schema
         self.namespace = {}  # The namespaces used by the OCX
         self.attributes = []  # the schema global attributes
         self.elements = []  # the schema global elements
         self.complex = []  # the schema global complex types
         self.version = ''  # The schema version of the parsed xsd
         self.dict = {}  # The schema element dictionary of legal types
-
+        self.logger = logging.getLogger(__name__)
+        # Check the schema uri
+        if not self.uri.exists():
+            self.logger.error('Wrong schema location: {}'.format(self.uri))
+            exit(1)
         # initialize the name space and parse the xsd
-
-        if self.initNameSpace():
-            if not self.parsed:
-                self.parseSchema()
+        self.initNameSpace()
+        self.parseSchema()
 
     def initNameSpace(self):
-        # open the schema file and read the namespaces
-        if not os.path.exists(self.filename):
-            return False
-        fd = open(self.filename, 'r')
+        # open the schema uri and read the namespaces
         pattern = 'xmlns'
-        for line in fd:
-            if re.search(pattern, line):
-                break  # Break when pattern is found & close the file
+        with open(self.uri, mode='r') as fd:
+            for line in fd:
+                if re.search(pattern, line):
+                    break  # Break when pattern is found & close the file
         fd.close()
 
         # Extract the name spaces
-        # Example namespace string:   xmlns:xs="http://www.w3.org/2001/XMLSchema"
+        # Example namespace string:   xmlns:xs=\http://www.w3.org/2001/XMLSchema"
 
         ns = re.findall(r'xmlns:\w+="\S+', line)
 
@@ -68,7 +67,7 @@ class OCXschema:
             v = re.findall(r'=\S+', str)
             value = re.sub(r'[="]+', "", v[0])
             self.namespace[key] = value
-        return True
+        return
 
     def getNameSpace(self):
         return self.namespace
@@ -78,7 +77,7 @@ class OCXschema:
             print('Call method "initNameSpace()"  first')
             return
         # create the OCXdom
-        self.tree = ET.parse(self.filename)  # Create the DOM tree
+        self.tree = ET.parse(self.uri)  # Create the DOM tree
         root = self.tree.getroot()
         # Retreive all global elements
         self.elements = root.findall('xs:element', self.namespace)
@@ -99,7 +98,6 @@ class OCXschema:
                         break
         # Create the lookup tables
         self.makeDictionary()
-        self.parsed = True
         return
 
     # Create the type dictionary/lookup tables
@@ -192,6 +190,10 @@ class OCXmodel:
         self.guids = {}  # GUID lookup table
         self.frametable = {}  # Frametable dict with guid as key
         self.logger = logging.getLogger(__name__)
+        # Check that the ocx model exists
+        if not self.ocxfile.is_file():
+            self.logger.error('The specified OCX file does not exist: {}'.format(self.ocxfile))
+            exit(1)
 
     # Generic function to retrieve the GUID from an object
     def getGUID(self, object):
@@ -210,15 +212,23 @@ class OCXmodel:
         header = Header(self.root, self.dict, self.logging)
 
 
-        print('Parsing OCX model    : ', self.ocxfile.name)
-        print('OCX version          : ', self.ocxversion)
+        print('Parsing OCX model    : {}'.format(self.ocxfile.name))
+        print('OCX version          :  {}'.format(self.ocxversion))
         if header.hasHeader():
-            print('Model name           : ', header.name)
-            print('Model timestamp      :  {}'.format(header.ts))
-            print('Author               :  {}'.format(header.author))
-            print('Originating system   :  {}'.format(header.system))
+            print('Model name           : {}'.format(header.name))
+            print('Model timestamp      : {}'.format(header.ts))
+            print('Author               : {}'.format(header.author))
+            print('Originating system   : {}'.format(header.system))
+
+        self.logger.info('Parsing OCX model    : {}'.format(self.ocxfile.name))
+        self.logger.info('Model name           : {}'.format(header.name))
+        if header.hasHeader():
+            self.logger.info('Model timestamp      : {}'.format(header.ts))
+            self.logger.info('Author               : {}'.format(header.author))
+            self.logger.info('Originating system   : {}'.format(header.system))
+
         if self.ocxversion != self.schema_version:
-            msg = ('Warning: Version {} of the OCX model is different from the referenced schema version: {}' \
+            msg = ('Version {} of the OCX model is different from the referenced schema version: {}' \
                   .format(self.ocxversion, self.schema_version))
             self.logger.warning(msg)
         # dom queries
@@ -377,9 +387,8 @@ class OCXmodel:
         print('')
         return
 
-    def modelQA(self):
-        # Duplicate GUIDS
-        print('QA checks on model {}'.format(self.ocxfile.name))
+    def checkModel(self):
+        print('Performing QA checks on model {}'.format(self.ocxfile.name))
         print('-------------------------------------')
         self.checkPhysicalProperties()
         self.checkDuplicates()
@@ -439,7 +448,7 @@ class OCXmodel:
             if not part.hasPysicalProperties():
                 type = part.getType()
                 if type == 'Panel' or type == 'Stiffener' or type == 'Plate' or type == 'Bracket':
-                    print('{} with guid {} has no PhysicalProperty'.format(part.getType(), part.getGuid()))
+                    self.logger.info('{} with guid {} has no PhysicalProperty'.format(part.getType(), part.getGuid()))
                     nprops = nprops + 1
         if nprops > 0:
             print('PhysicalProperty check:')
@@ -805,10 +814,15 @@ class StructurePart(EntityBase):
         if mytype == 'Panel':
             tight = self.object.get('tightness')
         elif mytype == 'Plate': # The plate inherit from Panel
-            guid = self.object.getGuid()
+            guid = self.getGuid()
             panelguid = self.model.getParentPanelGuid(guid)
-            panel = self.model.getObject(panelguid)
-            tight = panel.get('tightness')
+            if panelguid == 'NotFound':
+                tight = 'Undefined'
+            else:
+                panel = self.model.getObject(panelguid)
+                tight = panel.get(self.dict['tightness'])
+                if tight == None:
+                    tight = 'Undefined'
         else:
             tight = 'Undefined'
         return tight

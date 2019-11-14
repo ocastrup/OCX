@@ -19,14 +19,14 @@ def main():
                                      usage='%(prog)s [options] OCXfile1 OCXfile2 schema',
                                      description="Compare the two OCX models and identify differences.")
     # Add the arguments to the parser
-    argp.add_argument("-baseline", type=str, help="The baseline OCX model.", default='OCX_Models/SHI_Demo.xml')
-    argp.add_argument("-new", type=str, help="The updated OCX model.", default='OCX_Models/MidShip_1111.ocx')
+    argp.add_argument("-baseline", type=str, help="The baseline OCX model.", default='OCX_Models/KM_MIDSHIP_MODEL_0913.ocx')
+    argp.add_argument("-new", type=str, help="The updated OCX model.", default='OCX_Models/MidShip_1111_V2.ocx')
     argp.add_argument("-schema", type=str, help="URI to OCX schema xsd", default='OCX_Models/OCX_Schema.xsd')
     argp.add_argument("-p", "--print", default="yes", type=str, help="Report all differences to file")
     argp.add_argument("-o", "--output", default='ocxdiff.txt', type=str, help="Name of output file for report")
     argp.add_argument("-l", "--log", default=False, type=bool, help="Output logging information. This is useful for debugging")
     argp.add_argument("-log", "--logfile", default='diffOCX.log', type=str, help="Output logging information. This is useful for debugging")
-    argp.add_argument("-level", "--level", default='DEBUG', type=str, help='Log level. DEBUG is most verbose')
+    argp.add_argument("-level", "--level", default='WARNING', type=str, help='Log level. DEBUG is most verbose')
 
     options = argp.parse_args()
     # Verify that the models and schema exist
@@ -41,21 +41,22 @@ def main():
     logger.addHandler(handler)
     if str.upper(options.level) == 'DEBUG':
         logger.setLevel(logging.DEBUG)
+    elif str.upper(options.level) == 'ERROR':
+        logger.setLevel(logging.ERROR)
+    elif str.upper(options.level) == 'WARNING':
+        logger.setLevel(logging.WARNING)
     else:
         logger.setLevel(logging.INFO)
-    #Import the model only if the models and schema exist
-    if not ocx1.is_file():
-        logger.error('Please specify the correct base file {}'.format(options.baseline))
-    elif not ocx2.is_file():
-        logger.error('Please specify the correct base file {}'.format(options.new))
-    elif not schemafile.is_file():
-        logger.error('Please specify the correct schema location {}'.format(options.schema))
-    else:
-        base = OCXParser.OCXmodel(options.baseline, options.schema, options.log)
-        base.importModel()
-        base.modelQA()
-        base.printDryWeight()
-        guids = base.getGUIDs()
+    logger.info('Starting comparing OCX versions.')
+    logger.info('Baseline model: {}'.format(options.baseline))
+    logger.info('Revised model : {}'.format(options.new))
+    base = OCXParser.OCXmodel(options.baseline, options.schema, options.log)
+    revision = OCXParser.OCXmodel(options.new, options.schema, options.log)
+    base.importModel()
+    revision.importModel()
+    base.checkModel()
+    revision.checkModel()
+
 
 #        print('Object properties test: Type={}, id={}, name={}, Has props: {}, Has description:{}'\
 #        .format(panel.getType(),panel.getId(),panel.getName(),panel.hasPysicalProperties(), panel.hasDescription()))
