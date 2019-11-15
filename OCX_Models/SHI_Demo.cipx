@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<doc>
+  <Settings>
+    <ApplicationSettings>
+      <CurrentUser>Mike</CurrentUser>
+      <Description>SHI Demo</Description>
+    </ApplicationSettings>
+    <SetupSettings>
+      <Organization>Hexagon PPM</Organization>
+      <OutputFolder>D:\DNVGL_Approved_Project\Testing\OpenHCMMidships</OutputFolder>
+      <ExtFileFolder>.\Auxilliary_Files</ExtFileFolder>
+      <ExtFileChecked>.igs Files</ExtFileChecked>
+      <MappingFilePath>OCXMappingFile_S3D_SM_Library_Rev8.xlsx</MappingFilePath>
+      <LogFilePath>SHI_Demo.log</LogFilePath>
+      <ClassInformationPackageFile>SHI_Demo.cipx</ClassInformationPackageFile>
+      <OCXOutputFile>SHI_Demo.xml</OCXOutputFile>
+    </SetupSettings>
+    <UserSectedInputs Count="1">
+      <Rows />
+    </UserSectedInputs>
+  </Settings>
+</doc>

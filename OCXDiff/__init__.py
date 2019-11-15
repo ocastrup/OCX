@@ -6,8 +6,11 @@
 #  without any warranty.
 
 from pathlib import Path
-import OCXParser
+
 import logging
+
+from OCXParser import OCXmodel
+
 
 class OCXDiff:
     def __init__(self, ocx1: str, ocx2: str, schema: str, outputfile: str, log=False):
@@ -21,8 +24,8 @@ class OCXDiff:
         self.deletedparts = self.findDeletedParts()
 
     def importModels(self) -> True:
-        self.baseline = OCXParser.OCXmodel(self.path1, self.schema, False)
-        self.newversion = OCXParser.OCXmodel(self.path2, self.schema, False)
+        self.baseline = OCXmodel(self.path1, self.schema, False)
+        self.newversion = OCXmodel(self.path2, self.schema, False)
         self.baseline.importModel()
         self.guids1 = self.baseline.getGUIDs()
         self.newversion.importModel()

@@ -323,7 +323,7 @@ class SolidFromFace(GeometryBase):
                 normal = self.model.frameTableNormal(ref)
             # Get the sweep length as the object thickness
             pm = self.object.find(self.dict['platematerial'])
-            material = OCXParser.Material(self.model, self.object, pm, self.dict, self.logging)
+            material = OCXCommon.Material(self.model, self.object, pm, self.dict, self.logging)
             th = material.thickness()
             # Create the solid
             #            mksolid = OCCWrapper.OccMakeSolidPrism(self.face)

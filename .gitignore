@@ -1,18 +1,25 @@
 # ignore all files in named directories
 occpythonCore/
 MathematicaWrapper/
-OCX_Models/
 OCXDataFrames/
 OCC/
 Excluded/
-*.igs
-*.stp
+
 
 #Ignore XMLSPy files
 *.spp
+#Schema
 *.xsd
+#zip and geometry files
 *.zip
+*.zipx
 *.json
+*.igs
+*.stp
+*.jt
+# Log files
+*.log
+
 
 
 # Ignore Mathematica notebooks 

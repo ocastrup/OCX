@@ -22,7 +22,7 @@ def main():
                                      usage='%(prog)s [options] OCXfile schema',
                                      description="Renders the whole OCX model or a part identified by the guid.")
     # Add the arguments to the parser
-    argp.add_argument("-file", type=str, help="Your input OCX file.", default='OCX_Models/OpenHCMMidships_BVTest.xml')
+    argp.add_argument("-file", type=str, help="Your input OCX file.", default='OCX_Models/OpenHCMBox_20191031.xml')
     argp.add_argument("-schema", type=str, help="URI to OCX schema xsd", default='OCX_Models/OCX_Schema.xsd')
     argp.add_argument("-e", "--external", default=True, type=bool, help="Render the model from the external geometry. This is the default")
     argp.add_argument("-s", "--solid", default=False, type=bool, help="Render a solid model. The default is to render a sheet model. This option is only used if option -external=no")

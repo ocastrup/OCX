@@ -9,6 +9,8 @@ import json
 import uuid
 import re
 from  bidict import bidict
+
+import OCXCommon
 import OCXParser
 
 class OCX2JSON:
@@ -61,7 +63,7 @@ class OCX2JSON:
         self.addSingleAttributeValues({'NonTight','WaterTight','GasTight','Undefined'})
         properties = []
         for part in self.model.getPlates():
-            plate = OCXParser.StructurePart(self.model, part, self.model.dict, self.model.namespace)
+            plate = OCXCommon.StructurePart(self.model, part, self.model.dict, self.model.namespace)
             guid = plate.getGuid()
             cleanguid = re.sub(r'[\{\}]*','', guid) # Remove the  brackets
             name = plate.getName()

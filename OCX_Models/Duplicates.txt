@@ -1,0 +1,9 @@
+There are 8 non unique guids:
+Part {http://data.dnvgl.com/Schemas/ocxXMLSchema}Bracket with name <NoBlk>-11BKT.1-1, id 6947  and GUID {0010A20F-0000-0000-D809-D518A55C2204} is a duplicate
+Part {http://data.dnvgl.com/Schemas/ocxXMLSchema}Bracket with name <NoBlk>-10BKT.1-1, id 6965  and GUID {0010A20F-0000-0000-EA08-D518A55C2204} is a duplicate
+Part {http://data.dnvgl.com/Schemas/ocxXMLSchema}Bracket with name <NoBlk>-8BKT.1-1, id 6982  and GUID {0010A20F-0000-0000-7407-D518A55C2204} is a duplicate
+Part {http://data.dnvgl.com/Schemas/ocxXMLSchema}Bracket with name <NoBlk>-7BKT.1-1, id 6999  and GUID {0010A20F-0000-0000-D905-D518A55C2204} is a duplicate
+Part {http://data.dnvgl.com/Schemas/ocxXMLSchema}Bracket with name <NoBlk>-5BKT.1-1, id 7016  and GUID {0010A20F-0000-0000-BC04-D518A55C2204} is a duplicate
+Part {http://data.dnvgl.com/Schemas/ocxXMLSchema}Bracket with name <NoBlk>-4BKT.1-1, id 7033  and GUID {0010A20F-0000-0000-E902-D518A55C2204} is a duplicate
+Part {http://data.dnvgl.com/Schemas/ocxXMLSchema}Bracket with name <NoBlk>-2BKT.1-1, id 7050  and GUID {0010A20F-0000-0000-4A02-D518A55C2204} is a duplicate
+Part {http://data.dnvgl.com/Schemas/ocxXMLSchema}Bracket with name <NoBlk>-1BKT.1-1, id 7067  and GUID {0010A20F-0000-0000-0C61-8BB7A35C2104} is a duplicate

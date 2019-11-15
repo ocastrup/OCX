@@ -8,20 +8,10 @@
 import xml.etree.ElementTree as ET
 
 import numpy
-import os, logging
+import logging
 import re
 from pathlib import Path
-import OCXParser
-
-
-from OCC.Core.BRep import BRep_Builder
-# from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
-
-
 import OCXCommon
-from OCC.Core.TopoDS import TopoDS_Compound, TopoDS_Shape
-
-from OCXCommon import LogMessage
 
 
 class OCXschema:
@@ -34,6 +24,7 @@ class OCXschema:
         self.attributes = []  # the schema global attributes
         self.elements = []  # the schema global elements
         self.complex = []  # the schema global complex types
+        self.enums = {} # Dictionary of allowed enums
         self.version = ''  # The schema version of the parsed xsd
         self.dict = {}  # The schema element dictionary of legal types
         self.logger = logging.getLogger(__name__)
@@ -122,6 +113,22 @@ class OCXschema:
         for e in self.dict:
             value = self.dict[e]
             self.dict[e] = '{' + self.namespace['ocx'] + '}' + value
+        # Create the enum lookuptables
+        self.attributeEnumeration()
+
+    # Attributes enumerators
+    def attributeEnumeration(self):
+        for attr in self.attributes:
+            evalues = []
+            aname = attr.get('name')
+            enumerations = attr.findall('xs:enumeration')
+            if  enumerations == None:
+                self.enums[aname] = None
+            else:
+                for enum in enumerations:
+                    value = enum.get('value')
+                    evalues.append(value)
+            self.enums[aname] = evalues
 
 
 # class OCXdom  creates the DOM tree from the xml OCX model
@@ -176,6 +183,7 @@ class OCXdom:
     def getSeams(self):
         return self.root.findall('.//' + self.dict['seam'])
 
+
 # Class to parse the OCX model
 class OCXmodel:
     def __init__(self, ocxfile: str, schemafile: str, log=False):
@@ -187,6 +195,7 @@ class OCXmodel:
         self.namespace = sparser.getNameSpace()
         self.schema_version = sparser.version
         self.dict = sparser.dict  # The dictionary of parsable ocx elements
+        self.enums = sparser.enums # Lookuptable of legal enum values
         self.guids = {}  # GUID lookup table
         self.frametable = {}  # Frametable dict with guid as key
         self.logger = logging.getLogger(__name__)
@@ -209,7 +218,7 @@ class OCXmodel:
         # print ocx version and get the root
         self.root = self.dom.getRoot()
         # get the ocxXML header info
-        header = Header(self.root, self.dict, self.logging)
+        header = OCXCommon.Header(self.root, self.dict, self.logging)
 
 
         print('Parsing OCX model    : {}'.format(self.ocxfile.name))
@@ -287,6 +296,17 @@ class OCXmodel:
     def getSeams(self):
         return self.seams
 
+    def getModelName(self):
+        return self.ocxfile
+
+    def getDuplicates(self):
+        return self.duplicates
+
+    def getEnumeration(self, key):
+        if key in self.enums:
+            return self.enums[key]
+        else:
+            return None
 
     def modelInfo(self):
         nframes = len(self.frametable)
@@ -321,7 +341,7 @@ class OCXmodel:
     def totalPlateDryWeight(self)->float:
         dw = 0
         for object in self.getPlates():
-            part = StructurePart(self, object,self.dict, self.namespace)
+            part = StructurePart(self, object, self.dict, self.namespace)
             guid = part.getGuid()
             if self.getParentPanelGuid(guid) == 'NotFound':
                 dw = dw + part.getDryWeight()
@@ -385,77 +405,6 @@ class OCXmodel:
         print('Total weight        : {:12.6e}'.format(total))
         print('-------------------------------------')
         print('')
-        return
-
-    def checkModel(self):
-        print('Performing QA checks on model {}'.format(self.ocxfile.name))
-        print('-------------------------------------')
-        self.checkPhysicalProperties()
-        self.checkDuplicates()
-        self.checkWeights()
-        return
-
-    def checkWeights(self): # Check if reported dry weight of Panel is equal to the sum of child weights
-        print('Checking Panel dry weights')
-        ok = True
-        for object in self.getPanels():
-            panel = StructurePart(self, object, self.dict, self.namespace)
-            if panel.hasPysicalProperties():
-                pw = panel.getDryWeight()
-                children = self.getPanelChildren(panel.getGuid())
-                cw = 0
-                for child in children:
-                    object = self.getObject(child)
-                    part = StructurePart(self, object, self.dict, self.namespace)
-                    if part.hasPysicalProperties():
-                        cw = cw + part.getDryWeight()
-                r = abs(1-cw/pw)
-                if r > 0.1:
-                    print('Panel with name {} and GUID {}:'.format(panel.getName(),panel.getGuid()))
-                    print('  The Panel DryWeight = {:9.3f} is different from the sum of child weights ={:9.3f}.'\
-                           .format(pw, cw))
-                    ok = False
-        if ok:
-            print('Panel dry weights OK')
-        print('-------------------------------------')
-        return
-
-    def checkDuplicates(self):
-        if len(self.duplicates) > 0:  # Non-unique quids
-            print('Duplicate GUID check')
-            msg =('There are {} non unique guids:'.format(len(self.duplicates)))
-            print(msg)
-            for object in self.duplicates:
-                part = StructurePart(self, object, self.dict, self.namespace)
-                name = part.getName()
-                id = part.getId()
-                tag = part.getType()
-                guid = part.getGuid()
-                msg =('Part {} with name {}, id {}  and GUID {} is a duplicate.'.format(tag, name, id, guid))
-                print(msg)
-        else:
-            print('Duplicate GUID check OK')
-        print('-------------------------------------')
-        return
-
-    def checkPhysicalProperties(self):
-        # Check Existence of properties
-        guids = self.getGUIDs()
-        nprops = 0
-        for guid in guids:
-            object = self.getObject(guid)
-            part = OCXParser.StructurePart(self, object,self.dict,self.namespace)
-            if not part.hasPysicalProperties():
-                type = part.getType()
-                if type == 'Panel' or type == 'Stiffener' or type == 'Plate' or type == 'Bracket':
-                    self.logger.info('{} with guid {} has no PhysicalProperty'.format(part.getType(), part.getGuid()))
-                    nprops = nprops + 1
-        if nprops > 0:
-            print('PhysicalProperty check:')
-            print('Structure parts without PhysicalProperty: {}'.format(nprops))
-        else:
-            print('PhysicalProperty check OK')
-        print('-------------------------------------')
         return
 
     # Find all children structure parts of  the panels and store it's guids  in a dict with the panel guid as key
@@ -662,7 +611,7 @@ class FrameTable:
         # X positions
         xrefs = self.xrefp.findall(self.dict['refplane'])
         for ref in xrefs:
-            refp = RefPlane(ref, self.dict)
+            refp = OCXCommon.RefPlane(ref, self.dict)
             guid = refp.guid
             refloc = refp.location()
             unit = OCXCommon.OCXUnit(self.namespace)
@@ -672,7 +621,7 @@ class FrameTable:
         # Y positions
         yrefs = self.yrefp.findall(self.dict['refplane'])
         for ref in yrefs:
-            refp = RefPlane(ref, self.dict)
+            refp = OCXCommon.RefPlane(ref, self.dict)
             guid = refp.guid
             refloc = refp.location()
             unit = OCXCommon.OCXUnit(self.namespace)
@@ -682,7 +631,7 @@ class FrameTable:
         # Z positions
         zrefs = self.zrefp.findall(self.dict['refplane'])
         for ref in zrefs:
-            refp = RefPlane(ref, self.dict)
+            refp = OCXCommon.RefPlane(ref, self.dict)
             guid = refp.guid
             refloc = refp.location()
             unit = OCXCommon.OCXUnit(self.namespace)
@@ -695,248 +644,6 @@ class FrameTable:
         for frame in self.frametable:
             print('Frame: {}, Position: {}, NormalVector: {}'.format(frame, self.frametable[frame][0],
                                                                      self.frametable[frame][1]))
-class RefPlane:
-    def __init__(self, refplane, dict):
-        if not refplane == None:
-            self.guid = refplane.get(dict['guidref'])
-            self.name = refplane.get('name')
-            self.refloc = refplane.find(dict['referencelocation'])
-            self.ok = True
-        else:
-            self.guid = None
-            self.name = None
-            self.refloc = None
-            self.ok = False
-
-    def name(self):
-        return self.name
-
-    def guid(self):
-        return self.guid
-
-    def location(self):
-        return self.refloc
-
-class PhysicalProperties:
-    def __init__(self, parent, dict, namespace):
-        self.hasProp = False
-        if not parent == None:
-            props = parent.find(dict['physicalproperties'])
-            if not props == None:
-                dryw = props.find(dict['dryweight'])
-                unit = OCXCommon.OCXUnit(namespace)
-                self.dryweight = unit.numericValue(dryw)
-                cog = props.find(dict['centerofgravity'])
-                self.COG = OCXCommon.Point3D(cog, dict).GetPoint()
-                self.hasProp = True
-        else:
-            self.hasProp = False
-
-    def COG(self):
-        return self.COG
-
-    def dryWieght(self):
-        return self.dryweight
-
-class IDBase:
-    def __init__(self, object, dict):
-        self.object = object
-        self.dict = dict
-        self.id = object.get('id')
-
-    def getId(self):
-        return self.id
-
-class DescriptionBase(IDBase):
-    def __init__(self, object, dict, log=False):
-        super().__init__(object, dict)
-        self.name = object.get('name')
-        if self.name == None:
-            self.name = self.id
-        description = object.find(dict['description'])
-        if description == None:
-            self.hasDesc = False
-        else:
-            self.description = description
-            self.hasDesc = True
-        return
-
-    def getDescription(self):
-        return self.description
-
-    def hasDescription(self):
-        return self.hasDesc
-
-    def getName(self):
-        return self.name
-
-class EntityBase(DescriptionBase):
-    def __init__(self, object, dict):
-        super().__init__(object, dict)
-        self.guid = self.object.get(self.dict['guidref'])
-
-    def getGuid(self):
-        return self.guid
-
-class StructurePart(EntityBase):
-    def __init__(self, model, part, dict, namespace):
-        super().__init__(part, dict)
-        self.namespace = namespace
-        self.hasprops = False
-        self.model = model
-        props = part.find(dict['physicalproperties'])
-        if not props == None:
-            dryw = props.find(self.dict['dryweight'])
-            unit = OCXCommon.OCXUnit(self.namespace)
-            self.dryweight = unit.numericValue(dryw)
-            cog = props.find(self.dict['centerofgravity'])
-            self.COG = OCXCommon.Point3D(cog, dict).GetPoint()
-            self.hasprops = True
-        else:
-            self.hasprops = False
-
-    def getCOG(self):
-        return self.COG
-
-    def getDryWeight(self):
-        return self.dryweight
-
-    def hasPysicalProperties(self):
-        return self.hasprops
-
-    def getType(self):
-        tag = str(self.object.tag)
-        type = re.sub(r'\{.*\}','', tag) # Returns only the type after the namespace prefix
-        return type
-
-    def tightness(self):
-        mytype = self.getType()
-        if mytype == 'Panel':
-            tight = self.object.get('tightness')
-        elif mytype == 'Plate': # The plate inherit from Panel
-            guid = self.getGuid()
-            panelguid = self.model.getParentPanelGuid(guid)
-            if panelguid == 'NotFound':
-                tight = 'Undefined'
-            else:
-                panel = self.model.getObject(panelguid)
-                tight = panel.get(self.dict['tightness'])
-                if tight == None:
-                    tight = 'Undefined'
-        else:
-            tight = 'Undefined'
-        return tight
-
-class Header:
-    def __init__(self, object, dict, log=False):
-        header = object.find(dict['header'])
-        if not header == None:
-            self.ts = header.get('time_stamp')
-            self.name = header.get('name')
-            self.author = header.get('author')
-            self.org = header.get('organization')
-            self.system = header.get('originating_system')
-            self.header = True
-        else:
-            self.header = False
-
-    def timestamp(self):
-        return self.ts
-
-    def author(self):
-        return self.author
-
-    def name(self):
-        return self.name
-
-    def organization(self):
-        return self.org
-
-    def originatingSystem(self):
-        return self.system
-
-    def hasHeader(self):
-        return self.header
-
-
-
-class Vessel:
-    def __init__(self, model: OCXmodel, vessel, dict, log=False):
-        self.logging = log
-        self.mode = model
-        self.vessel = vessel
-        self.name = vessel.get('name')
-        self.guid = vessel.get(dict['guidref'])
-
-    def name(self):
-        if self.name == None:
-            self.name = self.vessel.get('id')
-        return self.name
-
-    def guid(self):
-        return self.guid
-
-class Plane3D:
-    def __init__(self, plane, dict, model: OCXmodel):
-        self.edge = None
-        self.dict = dict
-        self.model = model
-        self.origin = [0, 0, 0]
-        self.normal = [0, 0, 0]
-        #
-        # Function to retrieve the Plane3D parameters
-        if plane.tag == self.dict['plane3d']:
-            origin = plane.find(dict['origin'])
-            normal = plane.find(dict['normal'])
-            self.origin = OCXCommon.Point3D(origin, dict).GetPoint()
-            self.normal = OCXCommon.Vector3D(normal, dict).GetVector()
-        elif plane.tag == self.dict['gridref']:
-            guid = plane.get(self.dict['guidref'])
-            refplane = model.getObject(guid)
-
-    def normal(self) -> numpy.array:
-        return self.normal
-
-    def origin(self) -> numpy.array:
-        return self.origin
-
-
-# Return the CompositeCurve as edges
-
-
-
-
-class Material:
-    def __init__(self, model: OCXmodel, parent, material, dict, log=False):
-        self.dict = dict
-        self.logging = log
-        self.model = model
-        self.material = material
-        self.parent = parent
-
-    def thickness(self) -> float:
-        thickness = self.material.find(self.dict['thickness'])
-        if thickness == None:
-            # Assign a default thickness
-            th = 0.01
-            ParseError(self.parent, 'has no thickness')
-        else:
-            unit = OCXCommon.OCXUnit()
-            th = float(unit.numericValue(thickness))
-        return th
-
-# TODO: Implement reading of the product structure
-class DesignView:
-    def __init__(self, model: OCXmodel, parent, view, dict, log=False):
-        self.dict = dict
-        self.logging = log
-        self.model = model
-        self.designview = view
-        self.parent = parent
-
-    def modelTree(self) -> "void":
-        return
-
 
 # Return the UnboundedGeometry as a surface
 class UnboundedGeometry:
